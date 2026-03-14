@@ -36,6 +36,11 @@ Windows Registry ile "Başlangıçta Çalıştır" desteği.
 📥 Kurulum ve Kullanım
 Panno portable (taşınabilir) bir uygulamadır, kurulum gerektirmez.
 
+🤝 Katkıda Bulunma
+Bu bir açık kaynak projesidir. Yeni fikirleriniz varsa veya bir hata bulduysanız lütfen bir "Issue" açın veya "Pull Request" gönderin.
+
+Geliştiren: [Yusuf Kağan Yıldırım](https://github.com/YusufKaganY)
+
 Releases sekmesinden güncel .zip dosyasını indirin.
 
 Dosyaları bir klasöre çıkartın.
