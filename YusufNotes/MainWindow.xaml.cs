@@ -10,6 +10,11 @@ using System.Threading.Tasks;
 using Microsoft.Win32;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using forms = System.Windows.Forms;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Media.Animation;
+using System.Windows.Controls;
 
 namespace YusufWidget
 {
@@ -17,13 +22,30 @@ namespace YusufWidget
     {
         private const string RegistryAppName = "PannoWidgetApp";
 
+        private forms.NotifyIcon _notifyIcon;
+
+        // --- GLOBAL KISAYOL (HOTKEY) İÇİN WINDOWS API ---
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        private const int HOTKEY_ID = 9000;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const uint VK_P = 0x50; // Klavyedeki 'P' tuşu
+
         private DispatcherTimer _reminderTimer;
         public ObservableCollection<TodoItem> Todos { get; set; }
         public ObservableCollection<PersistentNote> Notes { get; set; }
 
+        private Action _lastUndoAction; // undo
+
         private PersistentNote _noteToDelete;
 
         private string dbPath = "Data Source=PannoNotes.db";
+        private string _currentTheme = "Yellow";
 
         public MainWindow()
         {
@@ -37,6 +59,17 @@ namespace YusufWidget
             // Windows bildirimlerindeki tıklamaları dinlemek için 
             ToastNotificationManagerCompat.OnActivated += ToastNotificationManagerCompat_OnActivated;
 
+            // Sistem Tepsisi (System Tray) İkonu Kurulumu
+            _notifyIcon = new forms.NotifyIcon();
+            _notifyIcon.Icon = new System.Drawing.Icon("note.ico");
+            _notifyIcon.Text = "Panno Widget App";
+            _notifyIcon.Visible = true;
+            _notifyIcon.DoubleClick += (s, args) =>
+            {
+                this.Show();
+                this.WindowState = WindowState.Normal;
+            };
+
             // Hatırlatıcı Zamanlayıcısı
             _reminderTimer = new DispatcherTimer();
             _reminderTimer.Interval = TimeSpan.FromSeconds(1);
@@ -47,6 +80,7 @@ namespace YusufWidget
             Notes = new ObservableCollection<PersistentNote>();
 
             LoadDataFromDatabase();
+            LoadSettings();
 
             // XAML Binding'leri için DataContext'i set ediyoruz
             this.DataContext = this;
@@ -62,17 +96,18 @@ namespace YusufWidget
 
                     // 1. Görevleri Yükle
                     var todoCmd = connection.CreateCommand();
-                    todoCmd.CommandText = "SELECT Id, Text, IsDone, ReminderTime FROM Todos";
+                    todoCmd.CommandText = "SELECT Id, Text, IsDone, ReminderTime, OrderIndex FROM Todos ORDER BY OrderIndex ASC";
                     using (var reader = todoCmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            Todos.Add(new TodoItem
+                            Todos.Add(new TodoItem  
                             {
                                 Id = reader.GetInt32(0),
                                 Text = reader.GetString(1),
                                 IsDone = reader.GetInt32(2) == 1,
-                                ReminderTime = reader.IsDBNull(3) ? null : reader.GetString(3)
+                                ReminderTime = reader.IsDBNull(3) ? null : reader.GetString(3),
+                                OrderIndex = reader.IsDBNull(4) ? 0 : reader.GetInt32(4)
                             });
                         }
                     }
@@ -103,6 +138,66 @@ namespace YusufWidget
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
+
+        //--- GLOBAL KISAYOL (HOTKEY) İŞLEMLERİ ---
+        // Pencere ilk yüklendiğinde Windows'a "Ben Ctrl+Shift+P'yi dinleyeceğim" diyoruz
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            IntPtr handle = new WindowInteropHelper(this).Handle;
+            HwndSource source = HwndSource.FromHwnd(handle);
+            source.AddHook(HwndHook); // Dinleyiciyi tak
+
+            // Ctrl (0x0002) + Shift (0x0004) + P (0x50) tuşunu sisteme kaydet
+            RegisterHotKey(handle, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_P);
+        }
+
+        // Windows'tan gelen her tuş sinyalini yakalayan kanca (Hook)
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_HOTKEY = 0x0312;
+
+            // Eğer basılan tuş bizim belirlediğimiz Ctrl+Shift+P ise
+            // Eğer basılan tuş bizim belirlediğimiz Ctrl+Shift+P ise
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                if (this.Visibility == Visibility.Visible)
+                {
+                    // Yumuşak Kapanış Animasyonu (Fade Out)
+                    DoubleAnimation fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(200));
+                    fadeOut.Completed += (s, args) =>
+                    {
+                        this.Hide();
+                        this.Opacity = OpacitySlider.Value; // Asıl şeffaflığını geri ver
+                    };
+                    this.BeginAnimation(Window.OpacityProperty, fadeOut);
+
+                    _notifyIcon.ShowBalloonTip(1000, "Panno", "Kısayolla gizlendi.", forms.ToolTipIcon.Info);
+                }
+                else
+                {
+                    // Yumuşak Açılış Animasyonu (Fade In)
+                    this.Opacity = 0; // Önce tamamen görünmez yap
+                    this.Show();
+                    this.WindowState = WindowState.Normal;
+                    this.Activate();
+
+                    DoubleAnimation fadeIn = new DoubleAnimation(OpacitySlider.Value, TimeSpan.FromMilliseconds(200));
+                    this.BeginAnimation(Window.OpacityProperty, fadeIn);
+                }
+                handled = true;
+            }
+
+            return IntPtr.Zero;
+        }
+
+        // Uygulama tamamen kapanırken (Çarpıya basınca) Windows'a "Tuşu geri bıraktım" diyoruz
+        protected override void OnClosed(EventArgs e)
+        {
+            IntPtr handle = new WindowInteropHelper(this).Handle;
+            UnregisterHotKey(handle, HOTKEY_ID);
+            base.OnClosed(e);
+        }
 
         // --- GÖREV İŞLEMLERİ ---
         private void AddTodo_Click(object sender, RoutedEventArgs e)
@@ -155,9 +250,69 @@ namespace YusufWidget
                     TodoInput.Clear();
                     TodoTimeInput.Clear();
                 }
+
+                UpdateTodoOrderInDb();
             }
         }
 
+        // Farenin sol tuşuna basılı tutup sürüklemeye başladığında
+        private void TodoItem_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                var panel = sender as StackPanel;
+                var todo = panel?.DataContext as TodoItem;
+                if (todo != null)
+                {
+                    // Sürükleme işlemini başlat (Sistem bu veriyi hafızaya alır)
+                    DragDrop.DoDragDrop(panel, todo, DragDropEffects.Move);
+                }
+            }
+        }
+
+        // Görevi yeni yerine bıraktığında
+        private void TodoList_Drop(object sender, DragEventArgs e)
+        {
+            var droppedTodo = e.Data.GetData(typeof(TodoItem)) as TodoItem;
+            var targetTodo = (e.OriginalSource as FrameworkElement)?.DataContext as TodoItem;
+
+            if (droppedTodo != null && targetTodo != null && droppedTodo != targetTodo)
+            {
+                // Listeden eski yerinden sil, yeni hedefin yerine ekle
+                int oldIndex = Todos.IndexOf(droppedTodo);
+                int newIndex = Todos.IndexOf(targetTodo);
+
+                Todos.RemoveAt(oldIndex);
+                Todos.Insert(newIndex, droppedTodo);
+
+                // Veritabanındaki sıralamayı (OrderIndex) toptan güncelle
+                UpdateTodoOrderInDb();
+            }
+        }
+
+        private void UpdateTodoOrderInDb()
+        {
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(dbPath))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = "UPDATE Todos SET OrderIndex = @OrderIndex WHERE Id = @Id";
+                    cmd.Parameters.Add("@OrderIndex", Microsoft.Data.Sqlite.SqliteType.Integer);
+                    cmd.Parameters.Add("@Id", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+                    for (int i = 0; i < Todos.Count; i++)
+                    {
+                        Todos[i].OrderIndex = i;
+                        cmd.Parameters["@OrderIndex"].Value = i;
+                        cmd.Parameters["@Id"].Value = Todos[i].Id;
+                        cmd.ExecuteNonQuery();
+                    }
+                    transaction.Commit();
+                }
+            }
+        }
         private void TodoInput_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter) AddTodo_Click(sender, e);
@@ -304,8 +459,20 @@ namespace YusufWidget
 
         private void Minimize_Click(object sender, RoutedEventArgs e)
         {
-            // Pencereyi Görev Çubuğuna indirir
-            this.WindowState = WindowState.Minimized;
+            // Görev çubuğundan tamamen gizle ve gizli simge çubuğuna at
+            this.Hide();
+            _notifyIcon.ShowBalloonTip(2000, "Panno", "Arka planda çalışmaya devam ediyorum.", forms.ToolTipIcon.Info);
+        }
+
+        private void Pin_Click(object sender, RoutedEventArgs e)
+        {
+            // Durumu tam tersine çevir
+            this.Topmost = !this.Topmost;
+
+            // Eğer üstte değilse butonu biraz soluklaştırarak kullanıcıya belli et
+            PinButton.Opacity = this.Topmost ? 1.0 : 0.5;
+
+            ShowInAppToast(this.Topmost ? "Ekrana sabitlendi 📌" : "Sabitleme kaldırıldı 🔓");
         }
 
         private void CancelReminder_Click(object sender, RoutedEventArgs e)
@@ -375,18 +542,51 @@ namespace YusufWidget
             }
         }
 
+        // Kopyala Butonuna basıldığında tetiklenir
+        private void CopyNote_Click(object sender, RoutedEventArgs e)
+        {
+            var note = (sender as FrameworkElement)?.DataContext as PersistentNote;
+
+            // Eğer not boş değilse içindeki metni Windows Panosuna (Clipboard) kopyala
+            if (note != null && !string.IsNullOrWhiteSpace(note.Content))
+            {
+                System.Windows.Clipboard.SetText(note.Content);
+                ShowInAppToast("Panoya kopyalandı! 📋");
+            }
+            else
+            {
+                ShowInAppToast("Kopyalanacak metin yok! 🤷‍♂️");
+            }
+        }
+
         // "Kaydedildi" gibi 2 saniye görünüp kaybolan tost mesajları için
-        private async void ShowInAppToast(string message)
+        // Tost mesajını Geri Al destekli hale getirdik
+        private async void ShowInAppToast(string message, bool showUndo = false)
         {
             PopupMessage.Text = message;
-            PopupButtons.Visibility = Visibility.Collapsed; // Butonlara gerek yok, gizle
+            PopupButtons.Visibility = Visibility.Collapsed;
+            UndoButton.Visibility = showUndo ? Visibility.Visible : Visibility.Collapsed;
             PopupOverlay.Visibility = Visibility.Visible;
 
-            // 2 saniye boyunca uygulamayı dondurmadan bekle
-            await Task.Delay(2000);
+            await Task.Delay(3000); // Geri almak için 3 saniye süre veriyoruz
 
-            // Ekranda hala bu mesaj varsa kapat (kullanıcı o arada başka bir şeye basmadıysa)
             if (PopupMessage.Text == message)
+            {
+                PopupOverlay.Visibility = Visibility.Collapsed;
+                if (showUndo) _lastUndoAction = null; // Süre dolunca hafızayı sil
+            }
+        }
+
+        // Geri Al butonuna basıldığında
+        private void Undo_Click(object sender, RoutedEventArgs e)
+        {
+            if (_lastUndoAction != null)
+            {
+                _lastUndoAction.Invoke(); // Kaydedilen geri alma işlemini çalıştır
+                _lastUndoAction = null;
+                ShowInAppToast("İşlem geri alındı! ✨");
+            }
+            else
             {
                 PopupOverlay.Visibility = Visibility.Collapsed;
             }
@@ -397,23 +597,43 @@ namespace YusufWidget
         {
             if (_noteToDelete != null)
             {
-                // Veritabanından sil
+                // 1. ADIM: Silmeden HEMEN ÖNCE yedeği güvene alıyoruz!
+                var deletedNote = _noteToDelete;
+
+                // 2. ADIM: Veritabanından sil
                 using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(dbPath))
                 {
                     connection.Open();
                     var cmd = connection.CreateCommand();
                     cmd.CommandText = "DELETE FROM Notes WHERE Id = @Id";
-                    cmd.Parameters.AddWithValue("@Id", _noteToDelete.Id);
+                    cmd.Parameters.AddWithValue("@Id", deletedNote.Id); // _noteToDelete yerine yedeği kullandık
                     cmd.ExecuteNonQuery();
                 }
 
-                Notes.Remove(_noteToDelete); // Listeden kaldır
-                _noteToDelete = null;        // Hafızayı temizle
-            }
+                Notes.Remove(deletedNote); // Listeden kaldır
+                _noteToDelete = null;      // Artık güvenle ana hafızayı temizleyebiliriz
 
-            // Popup'ı kapat ve bilgi ver
-            PopupOverlay.Visibility = Visibility.Collapsed;
-            ShowInAppToast("Not silindi! 🗑️");
+                // 3. ADIM: Geri Al (Undo) Hafızası
+                _lastUndoAction = () =>
+                {
+                    // Geri Al denirse veritabanına tekrar ekle
+                    using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(dbPath))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = "INSERT INTO Notes (Id, Title, Content) VALUES (@Id, @Title, @Content)";
+                        cmd.Parameters.AddWithValue("@Id", deletedNote.Id);
+                        cmd.Parameters.AddWithValue("@Title", deletedNote.Title);
+                        cmd.Parameters.AddWithValue("@Content", deletedNote.Content);
+                        cmd.ExecuteNonQuery();
+                    }
+                    Notes.Add(deletedNote); // Ekrana geri getir
+                };
+
+                // Popup'ı kapat ve mesajı yolla
+                PopupOverlay.Visibility = Visibility.Collapsed;
+                ShowInAppToast("Not silindi! 🗑️", true);
+            }
         }
 
         // "İptal" butonuna basıldığında
@@ -442,6 +662,129 @@ namespace YusufWidget
                 }
             }
             catch { }
+        }
+
+        // Slider her hareket ettiğinde tetiklenir
+        private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (this.IsLoaded)
+            {
+                // DİKKAT: Animasyonun Opacity (Saydamlık) üzerindeki kilidini kaldırıyoruz!
+                this.BeginAnimation(Window.OpacityProperty, null);
+
+                this.Opacity = OpacitySlider.Value;
+            }
+        }
+
+        // SADECE fare tıkını bıraktığında (sürükleme bitince) veritabanına kaydet
+        private void OpacitySlider_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            SaveSettings(_currentTheme, this.Opacity);
+        }
+
+        // Tema butonlarına tıklandığında çalışır
+        private void Theme_Click(object sender, RoutedEventArgs e)
+        {
+            var btn = sender as System.Windows.Controls.Button;
+            _currentTheme = btn.Tag.ToString();
+            ApplyTheme(_currentTheme);
+
+            // Temayı kaydet
+            SaveSettings(_currentTheme, this.Opacity);
+        }
+
+        // Renk kodlarını Widget'a uygular
+        private void ApplyTheme(string theme)
+        {
+            var brushConverter = new System.Windows.Media.BrushConverter();
+
+            // ÖNCE HER ŞEYİ VARSAYILAN (AYDINLIK) RENKLERE ÇEKELİM
+            this.Resources["HeaderBrush"] = brushConverter.ConvertFromString("#854D0E");
+            this.Resources["TextBrush"] = brushConverter.ConvertFromString("Black");
+
+            System.Windows.Media.Brush bgBrush = null;
+            System.Windows.Media.Brush borderBrush = null;
+
+            switch (theme)
+            {
+                case "Yellow":
+                    bgBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#FEF9C3");
+                    borderBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#EAB308");
+                    break;
+                case "Blue":
+                    bgBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#DBEAFE");
+                    borderBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#3B82F6");
+                    break;
+                case "Green":
+                    bgBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#DCFCE7");
+                    borderBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#22C55E");
+                    break;
+                case "Pink":
+                    bgBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#FCE7F3");
+                    borderBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#EC4899");
+                    break;
+                case "Dark":
+                    bgBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#1E293B");
+                    borderBrush = (System.Windows.Media.Brush)brushConverter.ConvertFromString("#334155");
+
+                    this.Resources["HeaderBrush"] = brushConverter.ConvertFromString("#F8FAFC");
+                    this.Resources["TextBrush"] = brushConverter.ConvertFromString("#E2E8F0");
+                    break;
+            }
+
+            // Seçilen renkleri hem ana pencereye hem de Popup'a uygula
+            if (bgBrush != null && borderBrush != null)
+            {
+                MainBorder.Background = bgBrush;
+                MainBorder.BorderBrush = borderBrush;
+
+                if (PopupBorder != null)
+                {
+                    PopupBorder.Background = bgBrush;
+                    PopupBorder.BorderBrush = borderBrush;
+                }
+            }
+        }
+
+        // --- AYAR HAFIZASI (PERSISTENCE) ---
+        private void LoadSettings()
+        {
+            try
+            {
+                using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(dbPath))
+                {
+                    connection.Open();
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = "SELECT Theme, Opacity FROM AppSettings WHERE Id = 1";
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            _currentTheme = reader.GetString(0);
+                            double savedOpacity = reader.GetDouble(1);
+
+                            // Arayüzü güncelle
+                            OpacitySlider.Value = savedOpacity;
+                            this.Opacity = savedOpacity; // BURA ÇOK ÖNEMLİ: Açılışta doğrudan uygula
+                            ApplyTheme(_currentTheme);
+                        }
+                    }
+                }
+            }
+            catch { /* İlk açılışta veritabanı kilitli vs. olursa çökmesin */ }
+        }
+
+        private void SaveSettings(string theme, double opacity)
+        {
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(dbPath))
+            {
+                connection.Open();
+                var cmd = connection.CreateCommand();
+                cmd.CommandText = "UPDATE AppSettings SET Theme = @Theme, Opacity = @Opacity WHERE Id = 1";
+                cmd.Parameters.AddWithValue("@Theme", theme);
+                cmd.Parameters.AddWithValue("@Opacity", opacity);
+                cmd.ExecuteNonQuery();
+            }
         }
 
         private void AutoStart_Checked(object sender, RoutedEventArgs e)
@@ -489,6 +832,13 @@ namespace YusufWidget
         public int Id { get; set; }
         public string Text { get; set; }
         public bool IsDone { get; set; }
+
+        private int _orderIndex;
+        public int OrderIndex
+        {
+            get => _orderIndex;
+            set { _orderIndex = value; OnPropertyChanged(); }
+        }
 
         private string _reminderTime;
         public string ReminderTime

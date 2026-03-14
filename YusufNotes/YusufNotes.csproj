@@ -21,6 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
     <Resource Include="note.ico" />
   </ItemGroup>
 

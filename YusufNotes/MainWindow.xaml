@@ -7,8 +7,12 @@
         Icon="note.ico"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="15">
+    <Window.Resources>
+        <SolidColorBrush x:Key="HeaderBrush" Color="#854D0E"/>
+        <SolidColorBrush x:Key="TextBrush" Color="Black"/>
+    </Window.Resources>
 
+    <Border x:Name="MainBorder" Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="15" TextElement.Foreground="{DynamicResource TextBrush}">
         <Grid Margin="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -16,9 +20,10 @@
             </Grid.RowDefinitions>
 
             <DockPanel Grid.Row="0" LastChildFill="False" Margin="5">
-                <TextBlock Text="📌 Panno Widget App" FontWeight="Bold" Foreground="#854D0E" VerticalAlignment="Center"/>
-                <Button Content="✕" Click="Close_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand" Margin="5,0,0,0"/>
-                <Button Content="—" Click="Minimize_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand" VerticalAlignment="Bottom"/>
+                <TextBlock Text="📌 Panno Widget App" FontWeight="Bold" Foreground="{DynamicResource HeaderBrush}" VerticalAlignment="Center"/>
+                <Button Content="✕" Click="Close_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="{DynamicResource HeaderBrush}" FontWeight="Bold" Cursor="Hand" Margin="5,0,0,0"/>
+                <Button Content="—" Click="Minimize_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="{DynamicResource HeaderBrush}" FontWeight="Bold" Cursor="Hand" VerticalAlignment="Bottom"/>
+                <Button x:Name="PinButton" Content="📌" Click="Pin_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="{DynamicResource HeaderBrush}" FontWeight="Bold" Cursor="Hand" Margin="2,0" ToolTip="Her zaman üstte tut"/>
             </DockPanel>
 
             <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
@@ -29,14 +34,16 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <ListBox x:Name="TodoList" ItemsSource="{Binding Todos}" Background="Transparent" BorderThickness="0" Margin="0,5">
+                        <ListBox x:Name="TodoList" ItemsSource="{Binding Todos}" AllowDrop="True" Drop="TodoList_Drop" Background="Transparent" BorderThickness="0" Margin="0,5">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                    <StackPanel Orientation="Horizontal" Margin="2" Background="Transparent" MouseMove="TodoItem_MouseMove" Cursor="SizeAll">
                                         <CheckBox IsChecked="{Binding IsDone}" VerticalAlignment="Center" Click="Todo_Checked"/>
                                         <TextBlock Text="{Binding Text}" Margin="10,0" VerticalAlignment="Center" FontSize="14">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsDone}" Value="True">
                                                             <Setter Property="TextDecorations" Value="Strikethrough"/>
@@ -90,10 +97,12 @@
                             <ItemsControl ItemsSource="{Binding Notes}" Margin="0,5">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Expander Header="{Binding Title}" Foreground="#854D0E" FontWeight="SemiBold" Margin="0,2">
+                                        <Expander Header="{Binding Title}" Foreground="{DynamicResource HeaderBrush}" FontWeight="SemiBold" Margin="0,2">
                                             <StackPanel Background="#FFFDE7" Margin="5">
                                                 <TextBox Text="{Binding Content, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" MinHeight="80" Padding="5"/>
-                                                <UniformGrid Columns="2" Margin="0,5">
+                                                <UniformGrid Columns="3" Margin="0,5">
+                                                    <Button Content="Kopyala" Background="#3b82f6" Foreground="White" Margin="2" Cursor="Hand" Click="CopyNote_Click" FontWeight="Bold"/>
+
                                                     <Button Content="Kaydet" Background="#84cc16" Foreground="White" Margin="2" Cursor="Hand" Click="SaveNote_Click" FontWeight="Bold"/>
                                                     <Button Content="Sil" Background="#ef4444" Foreground="White" Margin="2" Cursor="Hand" Click="DeleteNote_Click" FontWeight="Bold"/>
                                                 </UniformGrid>
@@ -108,25 +117,47 @@
                 <TabItem Header="Ayarlar">
                     <Grid Margin="10,20,10,10">
                         <StackPanel>
-                            <TextBlock Text="⚙️ Sistem Ayarları" FontWeight="Bold" Foreground="#854D0E" Margin="0,0,0,15" FontSize="14"/>
+                            <TextBlock Text="⚙️ Sistem Ayarları" FontWeight="Bold" Foreground="{DynamicResource HeaderBrush}" Margin="0,0,0,15" FontSize="14"/>
 
                             <CheckBox x:Name="AutoStartCheckBox" 
                                       Content="Bilgisayar açıldığında otomatik başlat" 
-                                      Foreground="#854D0E" 
+                                      Foreground="{DynamicResource HeaderBrush}" 
                                       FontWeight="SemiBold" 
                                       FontSize="13"
                                       Checked="AutoStart_Checked" 
                                       Unchecked="AutoStart_Unchecked"/>
+                            <TextBlock Text="Panno'yu Açma Klavye Kısayolu: ''Ctrl + Shift + P''" FontWeight="SemiBold" Foreground="{DynamicResource HeaderBrush}" Margin="0,20,0,5" FontSize="13"/>
 
-                            <TextBlock Text="🧑‍💻 Made by Yusuf Kagan Yildirim" FontWeight="Bold" Foreground="#854D0E" Margin="120,260,0,15" FontSize="11"/>
+
+                            <TextBlock Text="🎨 Panno Teması" FontWeight="SemiBold" Foreground="{DynamicResource HeaderBrush}" Margin="0,20,0,5" FontSize="13"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Width="30" Height="30" Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" Margin="0,0,10,0" Cursor="Hand" Click="Theme_Click" Tag="Yellow"/>
+                                <Button Width="30" Height="30" Background="#DBEAFE" BorderBrush="#3B82F6" BorderThickness="2" Margin="0,0,10,0" Cursor="Hand" Click="Theme_Click" Tag="Blue"/>
+                                <Button Width="30" Height="30" Background="#DCFCE7" BorderBrush="#22C55E" BorderThickness="2" Margin="0,0,10,0" Cursor="Hand" Click="Theme_Click" Tag="Green"/>
+                                <Button Width="30" Height="30" Background="#FCE7F3" BorderBrush="#EC4899" BorderThickness="2" Margin="0,0,10,0" Cursor="Hand" Click="Theme_Click" Tag="Pink"/>
+                                <Button Width="30" Height="30" Background="#1E293B" BorderBrush="#334155" BorderThickness="2" Margin="0,0,10,0" Cursor="Hand" Click="Theme_Click" Tag="Dark" ToolTip="Karanlık Tema"/>
+                            </StackPanel>
+
+                            <TextBlock Text="👻 Hayalet Modu (Saydamlık)" FontWeight="SemiBold" Foreground="{DynamicResource HeaderBrush}" Margin="0,20,0,5" FontSize="13"/>
+                            
+                            <Slider x:Name="OpacitySlider" 
+                                    Minimum="0.2" Maximum="1.0" Value="1.0" 
+                                    TickFrequency="0.1" IsSnapToTickEnabled="True" 
+                                    ValueChanged="OpacitySlider_ValueChanged" 
+                                    PreviewMouseLeftButtonUp="OpacitySlider_MouseUp"
+                                    Cursor="Hand" ToolTip="Uygulamanın görünürlüğünü ayarla"/>
+
+                            <TextBlock Text="🧑‍💻 Made by Yusuf Kagan Yildirim" FontWeight="Bold" Foreground="{DynamicResource HeaderBrush}" Margin="120,60,0,15" FontSize="11"/>
                         </StackPanel>
                     </Grid>
                 </TabItem>
             </TabControl>
-            <Grid x:Name="PopupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#B3000000" Margin="-10" >
-                <Border Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="15" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="15" MinWidth="220" MaxWidth="300">
+            <Grid x:Name="PopupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#B3000000" Margin="-10">
+                <Border x:Name="PopupBorder" Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="10" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="15" MinWidth="220" MaxWidth="300">
                     <StackPanel>
-                        <TextBlock x:Name="PopupMessage" Text="Mesaj buraya gelecek..." TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" Foreground="#854D0E" Margin="0,0,0,15" FontSize="14"/>
+                        <TextBlock x:Name="PopupMessage" Text="Mesaj buraya gelecek..." TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource HeaderBrush}" Margin="0,0,0,15" FontSize="14"/>
+
+                        <Button x:Name="UndoButton" Content="Geri Al ↩️" Background="#3b82f6" Foreground="White" FontWeight="Bold" Margin="0,0,0,10" Padding="10,5" Cursor="Hand" Click="Undo_Click" Visibility="Collapsed" BorderThickness="0"/>
 
                         <UniformGrid x:Name="PopupButtons" Columns="2" Visibility="Collapsed">
                             <Button Content="Evet, Sil" Background="#ef4444" Foreground="White" FontWeight="Bold" Margin="5" Cursor="Hand" Click="PopupYes_Click" BorderThickness="0"/>
