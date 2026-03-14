@@ -1,0 +1,124 @@
+﻿<Window x:Class="YusufWidget.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Panno Widget App" Height="450" Width="350"
+        WindowStyle="None" AllowsTransparency="True" 
+        Background="Transparent" Topmost="True"
+        Icon="note.ico"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="15">
+
+        <Grid Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" LastChildFill="False" Margin="5">
+                <TextBlock Text="🚀 Panno " FontWeight="Bold" Foreground="#854D0E" VerticalAlignment="Center"/>
+                <Button Content="✕" Click="Close_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand"/>
+            </DockPanel>
+
+            <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+                <TabItem Header="Görevler">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <ListBox x:Name="TodoList" ItemsSource="{Binding Todos}" Background="Transparent" BorderThickness="0" Margin="0,5">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                        <CheckBox IsChecked="{Binding IsDone}" VerticalAlignment="Center" Click="Todo_Checked"/>
+                                        <TextBlock Text="{Binding Text}" Margin="10,0" VerticalAlignment="Center" FontSize="14">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDone}" Value="True">
+                                                            <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                            <Setter Property="Foreground" Value="Gray"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <DockPanel Grid.Row="1" Margin="0,5">
+                            <Button Content="+" Click="AddTodo_Click" Width="30" DockPanel.Dock="Right" Background="#FACC15" Cursor="Hand" FontWeight="Bold"/>
+                            <TextBox x:Name="TodoTimeInput" Width="45" DockPanel.Dock="Right" Margin="5,0" ToolTip="Saat örn: 14:30&#x0a;Dakika örn: 1" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+                            <TextBox x:Name="TodoInput" ToolTip="Hızlı görev ekle... (Enter ile ekle)" KeyDown="TodoInput_KeyDown" Padding="5,2" VerticalContentAlignment="Center"/>
+                        </DockPanel>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="Notlar">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,5">
+                            <Button Content="Klasör Ekle" Click="AddNewNote_Click" DockPanel.Dock="Right" Background="#FACC15" Padding="10,0" Cursor="Hand" FontWeight="SemiBold"/>
+                            <TextBox x:Name="NewNoteTitleInput" Margin="0,0,5,0" ToolTip="Yeni bir not klasörü başlığı yazın..." Padding="5,2" VerticalContentAlignment="Center"/>
+                        </DockPanel>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Notes}" Margin="0,5">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Expander Header="{Binding Title}" Foreground="#854D0E" FontWeight="SemiBold" Margin="0,2">
+                                            <StackPanel Background="#FFFDE7" Margin="5">
+                                                <TextBox Text="{Binding Content, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" MinHeight="80" Padding="5"/>
+                                                <UniformGrid Columns="2" Margin="0,5">
+                                                    <Button Content="Kaydet" Background="#84cc16" Foreground="White" Margin="2" Cursor="Hand" Click="SaveNote_Click" FontWeight="Bold"/>
+                                                    <Button Content="Sil" Background="#ef4444" Foreground="White" Margin="2" Cursor="Hand" Click="DeleteNote_Click" FontWeight="Bold"/>
+                                                </UniformGrid>
+                                            </StackPanel>
+                                        </Expander>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="Ayarlar">
+                    <Grid Margin="10,20,10,10">
+                        <StackPanel>
+                            <TextBlock Text="⚙️ Sistem Ayarları" FontWeight="Bold" Foreground="#854D0E" Margin="0,0,0,15" FontSize="14"/>
+
+                            <CheckBox x:Name="AutoStartCheckBox" 
+                                      Content="Bilgisayar açıldığında otomatik başlat" 
+                                      Foreground="#854D0E" 
+                                      FontWeight="SemiBold" 
+                                      FontSize="13"
+                                      Checked="AutoStart_Checked" 
+                                      Unchecked="AutoStart_Unchecked"/>
+
+                            <TextBlock Text="🧑‍💻 Made by Yusuf Kagan Yildirim" FontWeight="Bold" Foreground="#854D0E" Margin="120,260,0,15" FontSize="11"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+            <Grid x:Name="PopupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#B3000000" Margin="-10" >
+                <Border Background="#FEF9C3" BorderBrush="#EAB308" BorderThickness="2" CornerRadius="15" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="15" MinWidth="220" MaxWidth="300">
+                    <StackPanel>
+                        <TextBlock x:Name="PopupMessage" Text="Mesaj buraya gelecek..." TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" Foreground="#854D0E" Margin="0,0,0,15" FontSize="14"/>
+
+                        <UniformGrid x:Name="PopupButtons" Columns="2" Visibility="Collapsed">
+                            <Button Content="Evet, Sil" Background="#ef4444" Foreground="White" FontWeight="Bold" Margin="5" Cursor="Hand" Click="PopupYes_Click" BorderThickness="0"/>
+                            <Button Content="İptal" Background="#9ca3af" Foreground="White" FontWeight="Bold" Margin="5" Cursor="Hand" Click="PopupNo_Click" BorderThickness="0"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
