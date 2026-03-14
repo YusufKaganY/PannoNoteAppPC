@@ -8,6 +8,8 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using System.Windows.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace YusufWidget
 {
@@ -32,9 +34,12 @@ namespace YusufWidget
 
             CheckStartupStatus();
 
+            // Windows bildirimlerindeki tıklamaları dinlemek için 
+            ToastNotificationManagerCompat.OnActivated += ToastNotificationManagerCompat_OnActivated;
+
             // Hatırlatıcı Zamanlayıcısı
             _reminderTimer = new DispatcherTimer();
-            _reminderTimer.Interval = TimeSpan.FromSeconds(30);
+            _reminderTimer.Interval = TimeSpan.FromSeconds(1);
             _reminderTimer.Tick += ReminderTimer_Tick;
             _reminderTimer.Start();
 
@@ -114,12 +119,12 @@ namespace YusufWidget
                     if (timeInput.Contains(":"))
                     {
                         // Kullanıcı "14:30" formatında belirli bir saat girdiyse
-                        fullReminderTime = DateTime.Now.ToString("yyyy-MM-dd") + " " + timeInput;
+                        fullReminderTime = DateTime.Now.ToString("yyyy-MM-dd") + " " + timeInput + ":00 ";
                     }
                     else if (int.TryParse(timeInput, out int minutes))
                     {
                         // Kullanıcı sadece "1", "5" gibi bir sayı girdiyse (X dakika sonra)
-                        fullReminderTime = DateTime.Now.AddMinutes(minutes).ToString("yyyy-MM-dd HH:mm");
+                        fullReminderTime = DateTime.Now.AddMinutes(minutes).ToString("yyyy-MM-dd HH:mm:ss");
                     }
                     else
                     {
@@ -194,18 +199,37 @@ namespace YusufWidget
 
         private void ReminderTimer_Tick(object sender, EventArgs e)
         {
-            // Saniye farkını göz ardı etmek için sadece Yıl-Ay-Gün Saat:Dakika karşılaştırıyoruz
-            string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            DateTime now = DateTime.Now;
 
-            foreach (var todo in Todos.ToList()) // Liste üzerinde dönerken silme/değişiklik ihtimaline karşı .ToList()
+            foreach (var todo in Todos.ToList())
             {
-                if (!todo.IsDone && todo.ReminderTime == currentTime)
+                if (!todo.IsDone && todo.HasReminder)
                 {
-                    ShowNotification(todo.Text);
+                    // Metin formatındaki saati gerçek tarihe çeviriyoruz
+                    if (DateTime.TryParse(todo.ReminderTime, out DateTime reminderDate))
+                    {
+                        TimeSpan diff = reminderDate - now;
 
-                    // Bildirim sonrası veritabanından ReminderTime'ı temizle (tekrar çalmasın)
-                    UpdateReminderInDb(todo.Id, null);
-                    todo.ReminderTime = null;
+                        if (diff.TotalSeconds <= 0)
+                        {
+                            // SÜRE BİTTİ
+                            ShowAlarmNotification(todo); 
+                            
+                            todo.ReminderTime = null;
+                            todo.TimeLeft = "⏰ Çalıyor..."; // Geri sayım yerine bu yazacak
+                            UpdateReminderInDb(todo.Id, null);
+                        }
+                        else
+                        {
+                            // SÜRE VAR: Geri sayımı ekranda anlık güncelle
+                            if (diff.TotalHours >= 1)
+                                todo.TimeLeft = $"{(int)diff.TotalHours}s {diff.Minutes}d kaldı";
+                            else if (diff.TotalMinutes >= 1)
+                                todo.TimeLeft = $"{diff.Minutes}d {diff.Seconds}sn kaldı";
+                            else
+                                todo.TimeLeft = $"{diff.Seconds}sn kaldı";
+                        }
+                    }
                 }
             }
         }
@@ -223,12 +247,78 @@ namespace YusufWidget
             }
         }
 
-        private void ShowNotification(string message)
+        private void ShowAlarmNotification(TodoItem todo) 
         {
             new ToastContentBuilder()
-                .AddText("📌 Hatırlatıcı")
-                .AddText(message)
+                .AddText("⏰ Panno Alarm!")
+                .AddText(todo.Text)
+                .SetToastScenario(ToastScenario.Alarm) 
+
+                // Kendi Sustur butonumuz:
+                .AddButton(new ToastButton()
+                    .SetContent("Sustur")
+                    .AddArgument("action", "dismiss")
+                    .AddArgument("todoId", todo.Id.ToString()))
+
+                // Kendi Ertele butonumuz:
+                .AddButton(new ToastButton()
+                    .SetContent("5 Dk Ertele")
+                    .AddArgument("action", "snooze")
+                    .AddArgument("snoozeTime", "5")
+                    .AddArgument("todoId", todo.Id.ToString()))
                 .Show();
+        }
+
+        private void ToastNotificationManagerCompat_OnActivated(ToastNotificationActivatedEventArgsCompat toastArgs)
+        {
+            ToastArguments args = ToastArguments.Parse(toastArgs.Argument);
+
+            if (args.TryGetValue("todoId", out string idStr) && args.TryGetValue("action", out string action))
+            {
+                int id = int.Parse(idStr);
+
+                // Ekran güncellemeleri için WPF'nin ana iş parçacığına (UI Thread) dönüyoruz
+                Dispatcher.Invoke(() =>
+                {
+                    var todo = Todos.FirstOrDefault(t => t.Id == id);
+                    if (todo != null)
+                    {
+                        if (action == "snooze")
+                        {
+                            int mins = int.Parse(args["snoozeTime"]);
+                            // Saniyeler dahil yeni zamanı hesaplayıp listeye ve veritabanına yazıyoruz!
+                            todo.ReminderTime = DateTime.Now.AddMinutes(mins).ToString("yyyy-MM-dd HH:mm:ss");
+                            UpdateReminderInDb(todo.Id, todo.ReminderTime);
+                            ShowInAppToast($"{mins} dakika ertelendi! 💤");
+                        }
+                        else if (action == "dismiss")
+                        {
+                            todo.ReminderTime = null;
+                            todo.TimeLeft = "";
+                            UpdateReminderInDb(todo.Id, null);
+                        }
+                    }
+                });
+            }
+        }
+
+        private void Minimize_Click(object sender, RoutedEventArgs e)
+        {
+            // Pencereyi Görev Çubuğuna indirir
+            this.WindowState = WindowState.Minimized;
+        }
+
+        private void CancelReminder_Click(object sender, RoutedEventArgs e)
+        {
+            var todo = (sender as FrameworkElement)?.DataContext as TodoItem;
+            if (todo != null)
+            {
+                // Veritabanından ve ekrandan hatırlatıcıyı siler
+                UpdateReminderInDb(todo.Id, null);
+                todo.ReminderTime = null;
+                todo.TimeLeft = "";
+                ShowInAppToast("Hatırlatıcı iptal edildi! 🔕");
+            }
         }
 
         // --- NOT İŞLEMLERİ ---
@@ -393,12 +483,35 @@ namespace YusufWidget
         }
     }
 
-    public class TodoItem
+    // Geri sayımın ekranda anlık güncellenmesini sağlayan akıllı sınıf
+    public class TodoItem : INotifyPropertyChanged
     {
         public int Id { get; set; }
         public string Text { get; set; }
         public bool IsDone { get; set; }
-        public string ReminderTime { get; set; }
+
+        private string _reminderTime;
+        public string ReminderTime
+        {
+            get => _reminderTime;
+            set { _reminderTime = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasReminder)); }
+        }
+
+        private string _timeLeft;
+        public string TimeLeft
+        {
+            get => _timeLeft;
+            set { _timeLeft = value; OnPropertyChanged(); }
+        }
+
+        // Hatırlatıcı varsa iptal butonunu göstermek için bir kontrol
+        public bool HasReminder => !string.IsNullOrEmpty(ReminderTime);
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
     }
 
     public class PersistentNote

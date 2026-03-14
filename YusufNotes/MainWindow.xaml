@@ -16,8 +16,9 @@
             </Grid.RowDefinitions>
 
             <DockPanel Grid.Row="0" LastChildFill="False" Margin="5">
-                <TextBlock Text="🚀 Panno " FontWeight="Bold" Foreground="#854D0E" VerticalAlignment="Center"/>
-                <Button Content="✕" Click="Close_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand"/>
+                <TextBlock Text="📌 Panno Widget App" FontWeight="Bold" Foreground="#854D0E" VerticalAlignment="Center"/>
+                <Button Content="✕" Click="Close_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand" Margin="5,0,0,0"/>
+                <Button Content="—" Click="Minimize_Click" DockPanel.Dock="Right" Background="Transparent" BorderBrush="Transparent" Foreground="#854D0E" FontWeight="Bold" Cursor="Hand" VerticalAlignment="Bottom"/>
             </DockPanel>
 
             <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
@@ -45,6 +46,21 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
+
+                                        <TextBlock Text="{Binding TimeLeft}" Foreground="#ef4444" FontSize="11" VerticalAlignment="Center" Margin="5,0" FontWeight="SemiBold"/>
+
+                                        <Button Content="🔕" Click="CancelReminder_Click" Background="Transparent" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Hatırlatıcıyı İptal Et">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasReminder}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
